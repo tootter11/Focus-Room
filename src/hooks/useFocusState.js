@@ -1,16 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { ITEMS } from '../items'
+import { ITEMS, THEMES, AMBIENCE_COST, STREAK_BONUS_DAYS } from '../items'
 
 const LOCAL_KEY = 'focusRoomState'
 const SESSION_SECONDS = 25 * 60
 
+const DEFAULT_STATE = {
+  coins: 0,
+  unlocked: {},
+  placed: {},
+  theme: 'default',
+  unlockedThemes: { default: true },
+  ambienceOwned: false,
+  ambienceOn: false,
+  streak: { count: 0, lastDate: null },
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function isYesterday(dateStr) {
+  if (!dateStr) return false
+  const d = new Date(dateStr)
+  const y = new Date()
+  y.setDate(y.getDate() - 1)
+  return d.toISOString().slice(0, 10) === y.toISOString().slice(0, 10)
+}
+
 function loadLocal() {
   try {
     const raw = localStorage.getItem(LOCAL_KEY)
-    return raw ? JSON.parse(raw) : { coins: 0, unlocked: {}, placed: {} }
+    return raw ? { ...DEFAULT_STATE, ...JSON.parse(raw) } : DEFAULT_STATE
   } catch {
-    return { coins: 0, unlocked: {}, placed: {} }
+    return DEFAULT_STATE
   }
 }
 
@@ -37,8 +60,7 @@ export function useFocusState(userId) {
           setState(s => ({
             ...s,
             coins: data.total_coins ?? s.coins,
-            unlocked: data.unlocked_items?.unlocked ?? s.unlocked,
-            placed: data.unlocked_items?.placed ?? s.placed,
+            ...(data.unlocked_items ?? {}),
           }))
         }
       })
@@ -48,10 +70,11 @@ export function useFocusState(userId) {
   useEffect(() => {
     saveLocal(state)
     if (userId) {
+      const { coins, ...rest } = state
       supabase.from('user_profiles').upsert({
         id: userId,
-        total_coins: state.coins,
-        unlocked_items: { unlocked: state.unlocked, placed: state.placed },
+        total_coins: coins,
+        unlocked_items: rest,
       }).then(() => {})
     }
   }, [state, userId])
@@ -63,7 +86,20 @@ export function useFocusState(userId) {
         if (s <= 1) {
           clearInterval(intervalRef.current)
           setRunning(false)
-          setState(prev => ({ ...prev, coins: prev.coins + 10 }))
+          setState(prev => {
+            const today = todayStr()
+            let streak = prev.streak
+            if (streak.lastDate === today) {
+              // already counted today, streak unchanged
+            } else if (isYesterday(streak.lastDate)) {
+              streak = { count: streak.count + 1, lastDate: today }
+            } else {
+              streak = { count: 1, lastDate: today }
+            }
+            const bonus = streak.count >= STREAK_BONUS_DAYS
+            const reward = bonus ? 20 : 10
+            return { ...prev, coins: prev.coins + reward, streak }
+          })
           setTimeout(() => setSecondsLeft(SESSION_SECONDS), 1200)
           return 0
         }
@@ -91,5 +127,33 @@ export function useFocusState(userId) {
     setState(prev => ({ ...prev, placed: { ...prev.placed, [itemId]: !prev.placed[itemId] } }))
   }
 
-  return { state, secondsLeft, running, start, pause, reset, buyItem, togglePlace }
+  const buyTheme = (themeId) => {
+    const theme = THEMES.find(t => t.id === themeId)
+    if (!theme || state.unlockedThemes[themeId] || state.coins < theme.cost) return
+    setState(prev => ({
+      ...prev,
+      coins: prev.coins - theme.cost,
+      unlockedThemes: { ...prev.unlockedThemes, [themeId]: true },
+    }))
+  }
+
+  const selectTheme = (themeId) => {
+    if (!state.unlockedThemes[themeId]) return
+    setState(prev => ({ ...prev, theme: themeId }))
+  }
+
+  const buyAmbience = () => {
+    if (state.ambienceOwned || state.coins < AMBIENCE_COST) return
+    setState(prev => ({ ...prev, coins: prev.coins - AMBIENCE_COST, ambienceOwned: true }))
+  }
+
+  const toggleAmbience = () => {
+    if (!state.ambienceOwned) return
+    setState(prev => ({ ...prev, ambienceOn: !prev.ambienceOn }))
+  }
+
+  return {
+    state, secondsLeft, running, start, pause, reset,
+    buyItem, togglePlace, buyTheme, selectTheme, buyAmbience, toggleAmbience,
+  }
 }

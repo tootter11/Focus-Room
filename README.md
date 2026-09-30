@@ -4,6 +4,18 @@ Gamified Pomodoro timer: finish a 25-minute session, earn 10 coins, spend them
 in the shop, decorate your room. Works offline via localStorage; optionally
 syncs to Supabase when a user logs in.
 
+## V2 features (already built in)
+
+- **Streak multiplier** — completing a session on 5+ consecutive days doubles
+  the coin reward (20 instead of 10) for as long as the streak holds.
+- **Room themes** — `src/items.js` → `THEMES` defines unlockable room
+  backgrounds (Cabin, Cyberpunk, Library). Add more by adding entries there.
+- **Ambience** — a "rain sounds" toggle, generated procedurally with the Web
+  Audio API (brown noise), so it needs no external audio file or hosting.
+- **Feedback link** — footer link to a form for "what should I add next?".
+  Update `FEEDBACK_URL` in `src/App.jsx` with your own Tally.so or Google
+  Form link.
+
 ## Local setup
 
 1. `npm install`
