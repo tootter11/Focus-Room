@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { ITEMS, THEMES, AMBIENCE_COST, STREAK_BONUS_DAYS } from '../items'
 
 const LOCAL_KEY = 'focusRoomState'
-const SESSION_SECONDS = 10
+const SESSION_SECONDS = 25 * 60
 
 const DEFAULT_STATE = {
   coins: 0,
