@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import { ITEMS, THEMES, AMBIENCE_COST, STREAK_BONUS_DAYS } from '../items'
 
 const LOCAL_KEY = 'focusRoomState'
-const SESSION_SECONDS = 10
+const SESSION_SECONDS = 25 * 60
 
 const DEFAULT_STATE = {
   coins: 0,
@@ -56,7 +56,8 @@ export function useFocusState(userId) {
       .select('total_coins, unlocked_items')
       .eq('id', userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error('Supabase load failed:', error.message, error)
         if (data) {
           setState(s => ({
             ...s,
@@ -76,7 +77,9 @@ export function useFocusState(userId) {
         id: userId,
         total_coins: coins,
         unlocked_items: rest,
-      }).then(() => {})
+      }).then(({ error }) => {
+        if (error) console.error('Supabase save failed:', error.message, error)
+      })
     }
   }, [state, userId])
 
