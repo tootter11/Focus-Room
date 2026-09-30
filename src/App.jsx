@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { useFocusState } from './hooks/useFocusState'
+import { usePresence } from './hooks/usePresence'
+import { useStats } from './hooks/useStats'
+import { useLeaderboard } from './hooks/useLeaderboard'
 import Timer from './components/Timer'
 import Room from './components/Room'
 import Shop from './components/Shop'
 import Themes from './components/Themes'
 import Ambience from './components/Ambience'
 import Tasks from './components/Tasks'
+import GoalProgress from './components/GoalProgress'
+import Stats from './components/Stats'
+import Leaderboard from './components/Leaderboard'
 
 // Replace with your own Tally.so / Google Form link
 const FEEDBACK_URL = 'https://tally.so/r/your-form-id'
@@ -16,19 +22,28 @@ const TABS = [
   { id: 'tasks', label: 'Tasks' },
   { id: 'shop', label: 'Shop' },
   { id: 'themes', label: 'Themes' },
+  { id: 'stats', label: 'Stats' },
+  { id: 'leaderboard', label: 'Leaders' },
 ]
 
 export default function App() {
-  const { session, loginWithGitHub, logout } = useAuth()
+  const { session, loginWithGitHub, logout, githubUsername } = useAuth()
   const userId = session?.user?.id ?? null
   const {
     state, secondsLeft, running, start, pause, reset,
     buyItem, togglePlace, buyTheme, selectTheme, buyAmbience, toggleAmbience,
-    addTask, toggleTask, removeTask,
-  } = useFocusState(userId)
+    addTask, toggleTask, removeTask, setDailyGoal, toggleLeaderboardOptIn,
+  } = useFocusState(userId, githubUsername)
   const [tab, setTab] = useState('timer')
 
+  const presenceCount = usePresence(userId, running)
+  const { daily, lifetimeMinutes } = useStats(userId, state.coins) // refetch when coins change (proxy for session completed)
+  const leaderboardRows = useLeaderboard(state.leaderboardOptIn)
+
   const openTasks = state.tasks.filter(t => !t.done).length
+  const todayCount = state.dailyProgress.date === new Date().toISOString().slice(0, 10)
+    ? state.dailyProgress.count
+    : 0
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-50 via-amber-50 to-neutral-50 dark:from-neutral-950 dark:via-neutral-900 dark:to-neutral-950">
@@ -45,16 +60,21 @@ export default function App() {
           </div>
         </header>
 
-        {state.streak.count > 1 && (
-          <div className="text-xs text-orange-600 dark:text-orange-400 font-medium mb-4">
-            🔥 {state.streak.count}-day streak{state.streak.count >= 5 ? ' — 2x coins active!' : ` — ${5 - state.streak.count} more day(s) for 2x coins`}
-          </div>
-        )}
+        <div className="flex items-center gap-3 mb-4 text-xs">
+          {state.streak.count > 1 && (
+            <span className="text-orange-600 dark:text-orange-400 font-medium">
+              🔥 {state.streak.count}-day streak{state.streak.count >= 5 ? ' — 2x coins' : ''}
+            </span>
+          )}
+          <span className="text-neutral-500">
+            👥 {presenceCount} focusing right now
+          </span>
+        </div>
 
-        <nav className="flex gap-2 mb-5">
+        <nav className="flex flex-wrap gap-2 mb-5">
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-1 py-2 rounded-xl border text-sm font-medium transition-colors relative
+              className={`flex-1 min-w-[30%] py-2 rounded-xl border text-sm font-medium transition-colors relative
                 ${tab === t.id
                   ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
                   : 'bg-white/70 dark:bg-neutral-800/70 border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300'}`}>
@@ -73,6 +93,7 @@ export default function App() {
             <div className="bg-white/90 dark:bg-neutral-800/90 backdrop-blur rounded-2xl p-6 text-center shadow-sm border border-neutral-200 dark:border-neutral-700">
               <Timer secondsLeft={secondsLeft} running={running} start={start} pause={pause} reset={reset} />
             </div>
+            <GoalProgress count={todayCount} goal={state.dailyGoal} setGoal={setDailyGoal} />
             <Room placed={state.placed} themeId={state.theme} />
             <Ambience
               owned={state.ambienceOwned}
@@ -101,6 +122,19 @@ export default function App() {
           <div className="bg-white/90 dark:bg-neutral-800/90 backdrop-blur rounded-2xl p-5 shadow-sm border border-neutral-200 dark:border-neutral-700">
             <Themes coins={state.coins} unlockedThemes={state.unlockedThemes}
               currentTheme={state.theme} buyTheme={buyTheme} selectTheme={selectTheme} />
+          </div>
+        )}
+
+        {tab === 'stats' && (
+          <div className="bg-white/90 dark:bg-neutral-800/90 backdrop-blur rounded-2xl p-5 shadow-sm border border-neutral-200 dark:border-neutral-700">
+            <Stats daily={daily} lifetimeMinutes={lifetimeMinutes} loggedIn={!!userId} />
+          </div>
+        )}
+
+        {tab === 'leaderboard' && (
+          <div className="bg-white/90 dark:bg-neutral-800/90 backdrop-blur rounded-2xl p-5 shadow-sm border border-neutral-200 dark:border-neutral-700">
+            <Leaderboard rows={leaderboardRows} optedIn={state.leaderboardOptIn}
+              toggleOptIn={toggleLeaderboardOptIn} loggedIn={!!userId} />
           </div>
         )}
 

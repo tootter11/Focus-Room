@@ -4,6 +4,7 @@ import { ITEMS, THEMES, AMBIENCE_COST, STREAK_BONUS_DAYS } from '../items'
 
 const LOCAL_KEY = 'focusRoomState'
 const SESSION_SECONDS = 25 * 60
+const SESSION_MINUTES = 25
 
 const DEFAULT_STATE = {
   coins: 0,
@@ -15,6 +16,10 @@ const DEFAULT_STATE = {
   ambienceOn: false,
   streak: { count: 0, lastDate: null },
   tasks: [],
+  dailyGoal: 4,
+  dailyProgress: { count: 0, date: null },
+  leaderboardOptIn: false,
+  username: null,
 }
 
 function todayStr() {
@@ -42,11 +47,14 @@ function saveLocal(state) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)) } catch {}
 }
 
-export function useFocusState(userId) {
+export function useFocusState(userId, githubUsername) {
   const [state, setState] = useState(loadLocal)
   const [secondsLeft, setSecondsLeft] = useState(SESSION_SECONDS)
   const [running, setRunning] = useState(false)
   const intervalRef = useRef(null)
+  const userIdRef = useRef(userId)
+
+  useEffect(() => { userIdRef.current = userId }, [userId])
 
   // On login, pull cloud state and merge in (cloud wins if present)
   useEffect(() => {
@@ -68,6 +76,13 @@ export function useFocusState(userId) {
       })
   }, [userId])
 
+  // Capture GitHub username once, for the leaderboard display
+  useEffect(() => {
+    if (githubUsername && !state.username) {
+      setState(prev => ({ ...prev, username: githubUsername }))
+    }
+  }, [githubUsername])
+
   // Persist on every change: always local, and to Supabase when logged in
   useEffect(() => {
     saveLocal(state)
@@ -77,6 +92,8 @@ export function useFocusState(userId) {
         id: userId,
         total_coins: coins,
         unlocked_items: rest,
+        username: state.username,
+        leaderboard_opt_in: state.leaderboardOptIn,
       }).then(({ error }) => {
         if (error) console.error('Supabase save failed:', error.message, error)
       })
@@ -90,6 +107,18 @@ export function useFocusState(userId) {
         if (s <= 1) {
           clearInterval(intervalRef.current)
           setRunning(false)
+
+          // Log the completed session to Supabase (fire and forget)
+          const uid = userIdRef.current
+          if (uid) {
+            supabase.from('sessions').insert({
+              user_id: uid,
+              duration_minutes: SESSION_MINUTES,
+            }).then(({ error }) => {
+              if (error) console.error('Session log failed:', error.message, error)
+            })
+          }
+
           setState(prev => {
             const today = todayStr()
             let streak = prev.streak
@@ -102,7 +131,12 @@ export function useFocusState(userId) {
             }
             const bonus = streak.count >= STREAK_BONUS_DAYS
             const reward = bonus ? 20 : 10
-            return { ...prev, coins: prev.coins + reward, streak }
+
+            const dailyProgress = prev.dailyProgress.date === today
+              ? { count: prev.dailyProgress.count + 1, date: today }
+              : { count: 1, date: today }
+
+            return { ...prev, coins: prev.coins + reward, streak, dailyProgress }
           })
           setTimeout(() => setSecondsLeft(SESSION_SECONDS), 1200)
           return 0
@@ -176,9 +210,17 @@ export function useFocusState(userId) {
     setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) }))
   }
 
+  const setDailyGoal = (n) => {
+    setState(prev => ({ ...prev, dailyGoal: Math.max(1, n) }))
+  }
+
+  const toggleLeaderboardOptIn = () => {
+    setState(prev => ({ ...prev, leaderboardOptIn: !prev.leaderboardOptIn }))
+  }
+
   return {
     state, secondsLeft, running, start, pause, reset,
     buyItem, togglePlace, buyTheme, selectTheme, buyAmbience, toggleAmbience,
-    addTask, toggleTask, removeTask,
+    addTask, toggleTask, removeTask, setDailyGoal, toggleLeaderboardOptIn,
   }
 }

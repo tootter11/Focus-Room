@@ -8,6 +8,14 @@ syncs to Supabase when a user logs in.
 
 - **Tasks** — a simple per-session to-do list (add, check off, delete), synced
   the same way as coins. The tab badge shows how many are still open.
+- **Live presence** — "X people focusing right now", using Supabase Realtime
+  presence (no video, no extra table — just a live count of active timers).
+- **Daily stats** — a 7-day bar chart of focus minutes plus lifetime total,
+  built from the new `sessions` table (login required).
+- **Opt-in leaderboard** — top 10 by coins, only shows users who've toggled
+  it on; off by default for privacy.
+- **Daily goal** — set a target number of sessions per day with a progress
+  bar on the Focus tab.
 - **Streak multiplier** — completing a session on 5+ consecutive days doubles
   the coin reward (20 instead of 10) for as long as the streak holds.
 - **Room themes** — `src/items.js` → `THEMES` defines unlockable room
@@ -36,7 +44,9 @@ In the Supabase SQL editor, run:
 create table user_profiles (
   id uuid references auth.users primary key,
   total_coins integer default 0,
-  unlocked_items jsonb default '{}'::jsonb
+  unlocked_items jsonb default '{}'::jsonb,
+  username text,
+  leaderboard_opt_in boolean default false
 );
 
 alter table user_profiles enable row level security;
@@ -46,7 +56,54 @@ create policy "Users can read own profile"
 
 create policy "Users can upsert own profile"
   on user_profiles for all using (auth.uid() = id);
+
+create policy "Anyone can read opted-in profiles for the leaderboard"
+  on user_profiles for select using (leaderboard_opt_in = true);
+
+create table sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  completed_at timestamptz default now(),
+  duration_minutes integer default 25
+);
+
+alter table sessions enable row level security;
+
+create policy "Users can insert own sessions"
+  on sessions for insert with check (auth.uid() = user_id);
+
+create policy "Users can read own sessions"
+  on sessions for select using (auth.uid() = user_id);
 ```
+
+**Already have the table from before?** Run this instead to add the new
+columns without losing existing data:
+
+```sql
+alter table user_profiles add column if not exists username text;
+alter table user_profiles add column if not exists leaderboard_opt_in boolean default false;
+
+create policy "Anyone can read opted-in profiles for the leaderboard"
+  on user_profiles for select using (leaderboard_opt_in = true);
+
+create table if not exists sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  completed_at timestamptz default now(),
+  duration_minutes integer default 25
+);
+
+alter table sessions enable row level security;
+
+create policy "Users can insert own sessions"
+  on sessions for insert with check (auth.uid() = user_id);
+
+create policy "Users can read own sessions"
+  on sessions for select using (auth.uid() = user_id);
+```
+
+Realtime presence (the "X people focusing now" count) works out of the box —
+no extra setup needed, it doesn't use a table.
 
 Then in Authentication → Providers, enable GitHub (or swap `useAuth.js` to
 `signInWithOtp` for email magic links) and set the redirect URL Supabase

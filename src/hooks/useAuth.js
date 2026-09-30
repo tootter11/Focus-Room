@@ -14,6 +14,9 @@ export function useAuth() {
 
   const loginWithGitHub = () => supabase.auth.signInWithOAuth({ provider: 'github' })
   const logout = () => supabase.auth.signOut()
+  const githubUsername = session?.user?.user_metadata?.user_name
+    ?? session?.user?.user_metadata?.preferred_username
+    ?? null
 
-  return { session, loginWithGitHub, logout }
+  return { session, loginWithGitHub, logout, githubUsername }
 }
