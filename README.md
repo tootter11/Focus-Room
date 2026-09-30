@@ -6,6 +6,8 @@ syncs to Supabase when a user logs in.
 
 ## V2 features (already built in)
 
+- **Tasks** — a simple per-session to-do list (add, check off, delete), synced
+  the same way as coins. The tab badge shows how many are still open.
 - **Streak multiplier** — completing a session on 5+ consecutive days doubles
   the coin reward (20 instead of 10) for as long as the streak holds.
 - **Room themes** — `src/items.js` → `THEMES` defines unlockable room

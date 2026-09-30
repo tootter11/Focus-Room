@@ -14,6 +14,7 @@ const DEFAULT_STATE = {
   ambienceOwned: false,
   ambienceOn: false,
   streak: { count: 0, lastDate: null },
+  tasks: [],
 }
 
 function todayStr() {
@@ -152,8 +153,29 @@ export function useFocusState(userId) {
     setState(prev => ({ ...prev, ambienceOn: !prev.ambienceOn }))
   }
 
+  const addTask = (text) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    setState(prev => ({
+      ...prev,
+      tasks: [...prev.tasks, { id: Date.now().toString(), text: trimmed, done: false }],
+    }))
+  }
+
+  const toggleTask = (taskId) => {
+    setState(prev => ({
+      ...prev,
+      tasks: prev.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t),
+    }))
+  }
+
+  const removeTask = (taskId) => {
+    setState(prev => ({ ...prev, tasks: prev.tasks.filter(t => t.id !== taskId) }))
+  }
+
   return {
     state, secondsLeft, running, start, pause, reset,
     buyItem, togglePlace, buyTheme, selectTheme, buyAmbience, toggleAmbience,
+    addTask, toggleTask, removeTask,
   }
 }
